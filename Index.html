@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MC Skin Editor</title>
+    <link rel="stylesheet" href="style.css">
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+            "tween": "https://unpkg.com/@tweenjs/tween.js@21.0.0/dist/tween.esm.js"
+        }
+    }
+    </script>
+    <style>
+        /* Ensure toggle-switch styles are available if not already in style.css globally */
+        .toggle-switch { position: relative; display: inline-block; width: 50px; height: 24px; margin-left: 10px; margin-right: 5px; vertical-align: middle;}
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--toggle-bg-unchecked, #ccc); transition: .4s; border-radius: 24px; }
+        .toggle-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: var(--toggle-knob-color, white); transition: .4s; border-radius: 50%; }
+        input:checked + .toggle-slider { background-color: var(--toggle-bg-checked, var(--primary-accent, #007bff)); }
+        body[data-theme="black"] input:checked + .toggle-slider:before { background-color: var(--toggle-knob-color, #000000); }
+        body:not([data-theme="black"]) input:checked + .toggle-slider:before { background-color: var(--toggle-knob-color, #ffffff); }
+        input:checked + .toggle-slider:before { transform: translateX(26px); }
+    </style>
+</head>
+<body>
+    <header class="top-bar">
+        <nav>
+            <a href="#home" class="nav-link active">Home</a>
+            <a href="#editor" class="nav-link">Editor</a>
+            <a href="#skins" class="nav-link">Skins</a>
+            <a href="#skin-packs" class="nav-link">Skin Packs</a>
+            <a href="#settings" class="nav-link">Settings</a>
+        </nav>
+    </header>
+    <main>
+        <div id="home-content" class="content-section active-content">
+            <h1>Welcome to MC Skin Editor</h1>
+            <div class="version-info">Version 1.0</div>
+        </div>
+
+        <div id="editor-content" class="content-section">
+            <div id="coordsInfo"> Cam Pos: X:0.00 Y:0.00 Z:0.00<br> Target:  X:0.00 Y:0.00 Z:0.00<br> Loading... </div>
+            <div id="uiContainer">
+                <div id="uiScrollContent">
+                    <div id="modeSwitchContainer">
+                        <input type="radio" name="uiMode" id="modeView" value="view" checked>
+                        <label for="modeView">View</label>
+                        <input type="radio" name="uiMode" id="modePaint" value="paint">
+                        <label for="modePaint">Paint</label>
+                    </div>
+                    <button id="importSkinButton" class="action-button">Import Skin (.png)</button>
+                    <button id="exportSkinButton" class="action-button">Export Skin (.png)</button>
+                    <button id="editorSaveOrApplyButton" class="action-button">Save Skin</button> 
+                    <button id="editorClearSkinButton" class="action-button delete-btn">Clear Skin</button> 
+
+                    <input type="file" id="skinInput" accept="image/png" style="display: none;">
+                    
+                    <div id="modelSwitchContainer" style="display: flex; align-items: center; padding: 5px 0; border: 1px solid #555; border-radius: 3px; margin-bottom: 5px; background-color: rgba(0,0,0,0.1);">
+                        <label for="modelTypeSwitch" style="margin-left: 8px; margin-right: auto; font-weight:bold; color: #ddd;">Model Type:</label>
+                        <label for="modelTypeSwitch" style="margin-bottom: 0; color: #ccc; cursor:pointer;">Steve</label>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="modelTypeSwitch">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <label for="modelTypeSwitch" style="margin-bottom: 0; margin-left: 5px; margin-right:8px; color: #ccc; cursor:pointer;">Alex</label>
+                    </div>
+
+                    <div id="visibilityControls" style="display: none;">
+                        <h4>Toggle Parts</h4>
+                        <button id="toggleLayersBtn">Toggle Layers Off</button>
+                        <button id="toggleBaseBtn">Toggle Base Off</button>
+                        <div id="visibilityCheckboxes">
+                            <label><input type="checkbox" id="toggleHead" data-part="head" checked> Head</label>
+                            <label><input type="checkbox" id="toggleHat" data-part="hat" checked> Head Layer</label>
+                            <label><input type="checkbox" id="toggleBody" data-part="body" checked> Body</label>
+                            <label><input type="checkbox" id="toggleJacket" data-part="jacket" checked> Body Layer</label>
+                            <label><input type="checkbox" id="toggleLeftArm" data-part="leftArm" checked> Left Arm</label>
+                            <label><input type="checkbox" id="toggleLeftSleeve" data-part="leftSleeve" checked> Left Arm Layer</label>
+                            <label><input type="checkbox" id="toggleRightArm" data-part="rightArm" checked> Right Arm</label>
+                            <label><input type="checkbox" id="toggleRightSleeve" data-part="rightSleeve" checked> Right Arm Layer</label>
+                            <label><input type="checkbox" id="toggleLeftLeg" data-part="leftLeg" checked> Left Leg</label>
+                            <label><input type="checkbox" id="toggleLeftPants" data-part="leftPants" checked> Left Leg Layer</label>
+                            <label><input type="checkbox" id="toggleRightLeg" data-part="rightLeg" checked> Right Leg</label>
+                            <label><input type="checkbox" id="toggleRightPants" data-part="rightPants" checked> Right Leg Layer</label>
+                        </div>
+                    </div>
+                    <div id="gridControlsContainer" style="display: none;">
+                        <h4>Grid Lines</h4>
+                        <button id="toggleBaseGridBtn">Toggle Base Grid Off</button>
+                        <button id="toggleLayerGridBtn">Toggle Layer Grid Off</button>
+                        <button id="toggleAllGridBtn">Toggle All Grid Off</button>
+                    </div>
+                    <div id="viewOptionsContainer" style="display: none;">
+                         <h4>View Options</h4>
+                        <button id="toggleInflationBtn">Toggle Inflation Off</button>
+                    </div>
+                    <div id="colorPickerContainer">
+                        <h4>COLOR</h4>
+                        <div id="paintTargetToggleContainer" style="display: flex; align-items: center; border: 1px solid #555; border-radius: 3px; padding: 5px 8px; margin-bottom: 8px; background-color: rgba(0,0,0,0.1);">
+                            <label for="paintTargetToggle" style="margin-right: auto; font-weight:bold; color: #ddd;">Paint Target:</label>
+                            <label for="paintTargetToggle" style="margin-bottom: 0; color: #ccc; cursor:pointer;">Skin</label>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="paintTargetToggle"> 
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label for="paintTargetToggle" style="margin-bottom: 0; margin-left: 5px; margin-right:8px; color: #ccc; cursor:pointer;">Lines</label>
+                        </div>
+
+                        <div class="color-preview-area">
+                            <div class="color-square" id="colorPreview"></div>
+                            <div class="color-square previous" id="previousColor"></div>
+                            <input type="text" id="hexInput" value="#ffffff">
+                        </div>
+                        <div class="picker-area" id="colorPickerArea">
+                            <div id="pickerHandle"></div>
+                        </div>
+                        <div class="slider hue-slider" id="hueSlider">
+                            <div id="hueHandle"></div>
+                        </div>
+                        <div class="rgb-inputs">
+                            <div> <label for="rInput">R</label> <input type="number" id="rInput" min="0" max="255" value="255"> </div>
+                            <div> <label for="gInput">G</label> <input type="number" id="gInput" min="0" max="255" value="255"> </div>
+                            <div> <label for="bInput">B</label> <input type="number" id="bInput" min="0" max="255" value="255"> </div>
+                        </div>
+                        <div class="tool-buttons">
+                            <button id="pencilToolBtn">Pencil tool</button>
+                            <button id="autoToneToolBtn">Auto Tone tool</button>
+                            <button id="eraserToolBtn">Eraser Tool</button>
+                            <button id="bucketToolBtn">Bucket Tool</button>
+                            <button id="colorPickerToolBtn">Color Picker tool</button>
+                            <button id="handToolBtn">Hand tool</button>
+                            <button id="undoBtn">Undo</button>
+                            <button id="redoBtn">Redo</button>
+                        </div>
+                    </div>
+                    <div id="info"> Please import a skin PNG file.<br> LMB Drag: Rotate, RMB Drag: Pan, Scroll: Zoom. </div>
+                </div>
+            </div>
+            <canvas id="viewerCanvas"></canvas>
+            <div id="gizmoContainer"> <canvas id="gizmoCanvas"></canvas> </div>
+        </div>
+
+        <div id="skins-content" class="content-section">
+            <div id="skins-tab-main-content">
+                <div class="top-controls-container">
+                    <input type="search" id="skins-search-input" class="search-input-field" placeholder="Search for skins..." aria-label="Search skins">
+                    <button id="import-skins-btn" class="action-button" type="button">Import Skins</button>
+                    <button id="download-all-skins-btn" class="action-button download-btn" type="button">Download All Skins</button>
+                </div>
+                <input type="file" id="skin-file-input" multiple accept="image/png" style="display: none;">
+                <div id="skins-display-area"></div>
+            </div>
+
+            <div id="skin-editor-full-view" style="display: none;" class="skin-editor-dashboard">
+                <div class="skin-editor-left-column">
+                    <canvas id="simple-skin-viewer-canvas"></canvas>
+                </div>
+                <div class="skin-editor-right-column">
+                    <div class="form-group">
+                        <label for="skin-editor-name-input">Name:</label>
+                        <input type="text" id="skin-editor-name-input">
+                    </div>
+                    <div class="form-group">
+                        <label for="skin-editor-type-select">Type:</label>
+                        <select id="skin-editor-type-select">
+                            <option value="steve">Steve/Normal</option>
+                            <option value="alex">Alex/Slim</option>
+                        </select>
+                    </div>
+                    <div class="skin-editor-actions-major">
+                        <button id="skin-editor-save-btn" class="action-button">Save Changes</button>
+                        <button id="skin-editor-cancel-btn" class="action-button cancel-btn">Cancel</button>
+                    </div>
+                    <div class="skin-editor-actions-minor">
+                        <button id="skin-editor-download-btn" class="action-button download-btn">Download PNG</button>
+                        <button id="skin-editor-delete-btn" class="action-button delete-btn">Delete Skin</button>
+                    </div>
+                    
+                    <hr class="skin-editor-divider">
+
+                    <div class="skin-editor-section">
+                        <h4>Full Edit</h4>
+                        <button id="skin-editor-edit-in-full-editor-btn" class="action-button">Edit in Main Editor</button>
+                    </div>
+
+                    <hr class="skin-editor-divider">
+                    
+                    <div class="skin-editor-section">
+                        <h4>Previews</h4>
+                        <div class="skin-editor-previews-container">
+                            <div class="skin-editor-2d-preview">
+                                <p>Preview:</p>
+                                <div class="preview-image-pair">
+                                    <img id="skin-editor-2d-front-preview" src="#" alt="2D Front Preview">
+                                    <img id="skin-editor-2d-back-preview" src="#" alt="2D Back Preview">
+                                </div>
+                            </div>
+                            <div class="skin-editor-texture-preview">
+                                <p>Raw Texture:</p>
+                                <img id="skin-editor-raw-texture-preview" src="#" alt="Skin Texture - Click to view full">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="skin-import-view" style="display: none; width: 100%; max-width: 600px; margin: 20px auto; padding: 20px; box-sizing: border-box; border: 1px solid var(--border-color); border-radius: 8px; background-color: var(--secondary-bg); flex-direction: column; gap: 15px;">
+                <h2 id="skin-import-view-title" style="text-align: center; margin-top:0;">Import Skin</h2>
+                
+                <div style="text-align: center; margin-bottom: 10px; display: flex; justify-content: center; align-items: center; gap: 10px; background-color: var(--input-bg); padding:10px; border-radius: 4px; border: 1px solid var(--border-color);">
+                    <img id="skin-import-preview-front-img" src="#" alt="Skin Front Preview" style="width: 80px; height: 160px; object-fit: contain; image-rendering: pixelated; border: 1px solid var(--placeholder-color); background-color: #777; cursor: pointer;">
+                    <img id="skin-import-preview-back-img" src="#" alt="Skin Back Preview" style="width: 80px; height: 160px; object-fit: contain; image-rendering: pixelated; border: 1px solid var(--placeholder-color); background-color: #777; cursor: pointer;">
+                </div>
+
+                <p id="skin-import-multi-counter" style="text-align: center; font-weight: bold; display: none; margin: 5px 0;">Skin <span id="skin-import-current-num">1</span>/<span id="skin-import-total-num">1</span></p>
+                
+                <div class="form-group" style="display: flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid var(--border-color); padding: 10px; border-radius: 5px; background-color: var(--bg-color);">
+                    <label for="skin-import-auto-mode-toggle" style="margin-bottom: 0; font-weight:bold;">Auto Mode</label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="skin-import-auto-mode-toggle"> 
+                        <span class="toggle-slider"></span>
+                    </label>
+                     <label for="skin-import-auto-mode-toggle" style="margin-bottom: 0; margin-left: 5px; font-weight:bold;">Self Mode</label>
+                </div>
+
+                <div id="skin-import-self-mode-controls" style="display: flex; flex-direction: column; gap: 15px;">
+                    <div class="form-group">
+                        <label for="skin-import-name-input">Name:</label>
+                        <input type="text" id="skin-import-name-input">
+                    </div>
+                    <div class="form-group">
+                        <label for="skin-import-type-select">Type:</label>
+                        <select id="skin-import-type-select">
+                            <option value="steve">Steve/Normal</option>
+                            <option value="alex">Alex/Slim</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="skin-import-actions" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+                    <button id="skin-import-cancel-btn" class="action-button cancel-btn">Cancel All</button>
+                    <button id="skin-import-back-btn" class="action-button" style="display: none;">Back</button>
+                    <button id="skin-import-action-btn" class="action-button">Import Skin</button> 
+                </div>
+            </div>
+        </div>
+
+        <div id="skin-packs-content" class="content-section">
+            <div id="skin-packs-main-view">
+                <div class="top-controls-container">
+                    <input type="search" id="skin-packs-search-input" class="search-input-field" placeholder="Search for skin packs..." aria-label="Search skin packs">
+                    <button id="new-skin-pack-btn" class="action-button">New Skin Pack</button>
+                    <button id="import-skin-packs-btn" class="action-button">Import Skin Packs</button>
+                    <button id="download-all-skin-packs-btn" class="action-button download-btn">Download All Packs</button>
+                </div>
+                <input type="file" id="skin-pack-file-input" multiple accept=".mcpack" style="display: none;">
+                <div id="skin-packs-display-area"><p>No skin packs created yet. Click "New Skin Pack" to create one.</p></div>
+            </div>
+            <div id="create-skin-pack-view" style="display: none;">
+                <div id="skin-pack-creator-header">Create New Skin Pack</div>
+                <div class="form-group">
+                    <label for="pack-name-input">Pack Name:</label>
+                    <input type="text" id="pack-name-input" placeholder="My Awesome Skin Pack">
+                </div>
+                <div class="form-group">
+                    <label for="pack-description-input">Pack Description:</label>
+                    <textarea id="pack-description-input" placeholder="A collection of my favorite skins!"></textarea>
+                </div>
+
+                <h3>Skins Import Method:</h3>
+                <div class="form-group" style="display: flex; align-items: center; border: 1px solid var(--border-color); padding: 10px; border-radius: 5px; background-color: var(--bg-color);">
+                    <label for="pack-skin-source-toggle" style="margin-bottom: 0; font-weight:bold;">From Device</label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="pack-skin-source-toggle"> 
+                        <span class="toggle-slider"></span>
+                    </label>
+                    <label for="pack-skin-source-toggle" style="margin-bottom: 0; margin-left: 5px; font-weight:bold;">From My Skins</label>
+                </div>
+
+                <div id="pack-from-device-options">
+                    <div class="form-group">
+                        <label for="pack-device-skin-files">Select Skins:</label>
+                        <input type="file" id="pack-device-skin-files" multiple accept="image/png" style="margin-bottom:10px;">
+                    </div>
+                </div>
+
+                <div id="pack-from-my-skins-options" style="display:none;">
+                    <label for="pack-available-skins-search">Search skins from your library:</label>
+                    <input type="search" id="pack-available-skins-search" class="search-input-field" placeholder="Search available skins..." style="margin-bottom: 10px; width:100%; box-sizing: border-box;">
+                    <div id="pack-available-skins-list" class="available-skins-list" style="margin-bottom: 10px;">Loading skins...</div>
+                    <div class="form-group" id="pack-my-skins-management-toggle-container" style="display: flex; align-items: center; border: 1px solid var(--border-color); padding: 8px; border-radius: 5px; background-color: var(--input-bg); margin-top:5px;">
+                        <label for="pack-my-skins-use-existing-toggle" style="margin-bottom: 0;">Auto-Manage</label>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="pack-my-skins-use-existing-toggle"> 
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <label for="pack-my-skins-use-existing-toggle" style="margin-bottom: 0; margin-left:5px;">Use Existing Info</label>
+                    </div>
+                </div>
+                
+                <div class="form-group" style="display: flex; align-items: center; border: 1px solid var(--border-color); padding: 10px; border-radius: 5px; background-color: var(--bg-color); margin-top:15px;">
+                    <label for="pack-skin-auto-mode-toggle" style="margin-bottom: 0; font-weight:bold;">Auto Mode</label>
+                     <label class="toggle-switch">
+                        <input type="checkbox" id="pack-skin-auto-mode-toggle"> 
+                        <span class="toggle-slider"></span>
+                    </label>
+                    <label for="pack-skin-auto-mode-toggle" style="margin-bottom: 0; margin-left:5px; font-weight:bold;">Self Mode</label>
+                </div>
+
+                <div id="pack-self-mode-skin-processor" style="display:none; margin-top:15px; padding:15px; border:1px dashed var(--border-color); border-radius:5px;">
+                    <h4 id="pack-self-mode-processor-title" style="text-align:center; margin-top:0;">Processing Skin (<span id="pack-self-mode-current-num">1</span>/<span id="pack-self-mode-total-num">1</span>)</h4>
+                    <div style="text-align: center; margin-bottom: 10px; display: flex; justify-content: center; align-items: center; gap: 10px; background-color: var(--input-bg); padding:5px; border-radius: 4px; border: 1px solid var(--border-color);">
+                        <img id="pack-self-mode-preview-front-img" src="#" alt="Skin Front Preview" style="width: 64px; height: 128px; object-fit: contain; image-rendering: pixelated; border: 1px solid var(--placeholder-color); background-color: #777; cursor: pointer;">
+                        <img id="pack-self-mode-preview-back-img" src="#" alt="Skin Back Preview" style="width: 64px; height: 128px; object-fit: contain; image-rendering: pixelated; border: 1px solid var(--placeholder-color); background-color: #777; cursor: pointer;">
+                    </div>
+                    <div class="form-group">
+                        <label for="pack-self-mode-skin-name">Skin Name in Pack:</label>
+                        <input type="text" id="pack-self-mode-skin-name">
+                    </div>
+                    <div class="form-group">
+                        <label for="pack-self-mode-skin-type">Skin Type:</label>
+                        <select id="pack-self-mode-skin-type">
+                            <option value="steve">Steve/Normal</option>
+                            <option value="alex">Alex/Slim</option>
+                        </select>
+                    </div>
+                    <div style="text-align:right; margin-top:10px; display:flex; justify-content:space-between;">
+                        <button id="pack-self-mode-cancel-all-btn" class="action-button cancel-btn">Cancel All</button>
+                        <div>
+                            <button id="pack-self-mode-back-btn" class="action-button" style="margin-right:5px;">Back</button>
+                            <button id="pack-self-mode-next-btn" class="action-button">Next</button> 
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="pack-add-clear-actions" style="margin-top:15px; display:flex; gap:10px; justify-content:flex-end;">
+                    <button id="pack-clear-selected-skins-btn" class="action-button cancel-btn">Clear Selected</button>
+                    <button id="pack-add-processed-skins-btn" class="action-button">Add to Pack</button> 
+                </div>
+
+                <h3>Skins in this Pack (<span id="current-pack-skin-count">0</span>)</h3>
+                <input type="search" id="current-pack-skins-search" class="search-input-field" placeholder="Search skins in this pack..." style="margin-bottom: 10px; width:100%; box-sizing: border-box;">
+                <div id="current-pack-skins-preview"><p>No skins added yet.</p></div>
+                
+                <div id="skin-pack-actions"> 
+                    <button id="cancel-pack-creation-btn" class="action-button cancel-btn">Cancel</button>
+                    <button id="save-pack-btn" class="action-button">Save Pack</button>
+                    <button id="save-download-pack-btn" class="action-button download-btn">Save & Download</button>
+                </div>
+            </div>
+        </div>
+        <div id="settings-content" class="content-section">
+            <div class="theme-select-container">
+                <label for="theme-selector">Choose Theme:</label>
+                <select id="theme-selector"><option value="black">Black</option><option value="white">White</option></select>
+            </div>
+            <div class="settings-delete-button-container">
+                <h2>Data Management</h2>
+                <button id="delete-all-skins-btn" class="action-button settings-delete-button">Delete All Skins</button>
+                <button id="delete-all-skin-packs-btn" class="action-button settings-delete-button">Delete All Skin Packs</button>
+                <button id="delete-all-data-btn" class="action-button settings-delete-button">Delete All Data</button>
+            </div>
+        </div>
+    </main>
+
+    <!-- Save New Skin Modal (for Editor Tab) -->
+    <div id="save-new-skin-modal" class="modal">
+        <div class="modal-content">
+            <span id="close-save-new-skin-modal-btn" class="close-modal-btn">×</span>
+            <h2>Save New Skin</h2>
+            <div style="text-align: center; margin-bottom: 10px; display: flex; justify-content: center; align-items: center; gap: 10px; background-color: var(--input-bg); padding:10px; border-radius: 4px; border: 1px solid var(--border-color);">
+                <img id="save-new-skin-preview-front-img" src="#" alt="Skin Front Preview" style="width: 80px; height: 160px; object-fit: contain; image-rendering: pixelated; border: 1px solid var(--placeholder-color); background-color: #777;">
+                <img id="save-new-skin-preview-back-img" src="#" alt="Skin Back Preview" style="width: 80px; height: 160px; object-fit: contain; image-rendering: pixelated; border: 1px solid var(--placeholder-color); background-color: #777;">
+            </div>
+            <div class="form-group">
+                <label for="save-new-skin-name-input">Skin Name:</label>
+                <input type="text" id="save-new-skin-name-input" placeholder="My New Skin">
+            </div>
+            <div class="form-group">
+                <label for="save-new-skin-type-select">Skin Type:</label>
+                <select id="save-new-skin-type-select">
+                    <option value="steve">Steve/Normal</option>
+                    <option value="alex">Alex/Slim</option>
+                </select>
+            </div>
+            <div style="text-align:right; margin-top:20px;">
+                <button id="cancel-save-new-skin-btn" class="action-button cancel-btn">Cancel</button>
+                <button id="confirm-save-new-skin-btn" class="action-button">Save to My Skins</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="edit-skin-in-pack-modal" class="modal">
+        <div class="modal-content">
+            <span id="close-edit-skin-in-pack-modal-btn" class="close-modal-btn">×</span>
+            <h2>Edit Skin in Pack</h2>
+            <div style="text-align: center; margin-bottom: 10px; display: flex; justify-content: center; align-items: center; gap: 10px; background-color: var(--input-bg); padding:5px; border-radius: 4px; border: 1px solid var(--border-color);">
+                <img id="edit-skin-in-pack-preview-front-img" src="#" alt="Skin Front Preview" style="width: 80px; height: 160px; object-fit: contain; image-rendering: pixelated; border: 1px solid var(--placeholder-color); background-color: #777; cursor: pointer;">
+                <img id="edit-skin-in-pack-preview-back-img" src="#" alt="Skin Back Preview" style="width: 80px; height: 160px; object-fit: contain; image-rendering: pixelated; border: 1px solid var(--placeholder-color); background-color: #777; cursor: pointer;">
+            </div>
+            <div class="form-group">
+                <label for="edit-skin-in-pack-name">Skin Name:</label>
+                <input type="text" id="edit-skin-in-pack-name">
+            </div>
+            <div class="form-group">
+                <label for="edit-skin-in-pack-type">Skin Type:</label>
+                <select id="edit-skin-in-pack-type">
+                    <option value="steve">Steve/Normal</option>
+                    <option value="alex">Alex/Slim</option>
+                </select>
+            </div>
+            <div style="text-align:right; margin-top:20px;">
+                <button id="cancel-edit-skin-in-pack-btn" class="action-button cancel-btn">Cancel</button>
+                <button id="save-edit-skin-in-pack-btn" class="action-button">Save Changes</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="large-skin-preview-modal" class="modal">
+        <div class="modal-content">
+            <span id="close-large-skin-preview-btn" class="close-modal-btn">×</span>
+            <img id="large-skin-preview-img" src="#" alt="Large skin preview">
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>
