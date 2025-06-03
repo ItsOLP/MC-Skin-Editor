@@ -525,7 +525,9 @@ function resetEditorToDefaultState(clearOldContextAndDraft = true) {
         localStorage.removeItem('skinToEditInFullEditorId'); 
         localStorage.removeItem(currentEditorDraftStateKey);
         localStorage.removeItem(pendingFullEditorSkinDataKey); 
+        console.log("Editor: resetEditorToDefaultState - Cleared relevant localStorage keys.");
     }
+    // Pass null for skinIdForContext to ensure it's treated as a template/new import
     loadTextureFromFile(null, 'steve', null, false); 
     console.log("Editor reset to default state. Clear context and draft:", clearOldContextAndDraft);
 }
@@ -535,16 +537,14 @@ async function loadTextureFromFile(fileOrDataUrl, modelTypeToSet = null, skinIdF
     let idToApplyOnSuccess = skinIdForContext;
 
     if (!isDraftLoad) {
-        // For non-draft loads, currentLoadedSkinIdForEditor will be set upon successful image load,
-        // or explicitly nulled if it's a template load or error.
-        // If skinIdForContext is null (e.g. new import/template), it will be set to null on success/error.
+         console.log(`Editor: loadTextureFromFile (NOT DRAFT) - skinIdForContext: ${skinIdForContext}, currentLoadedSkinIdForEditor will be updated on success.`);
     } else {
-        // For draft loads, currentLoadedSkinIdForEditor should have already been restored by loadEditorDraftState.
-        // We respect that existing context.
-        console.log(`Editor: loadTextureFromFile (DRAFT LOAD) - Retaining currentLoadedSkinIdForEditor: ${currentLoadedSkinIdForEditor}`);
+        console.log(`Editor: loadTextureFromFile (DRAFT LOAD) - skinIdForContext: ${skinIdForContext}, currentLoadedSkinIdForEditor (pre-existing): ${currentLoadedSkinIdForEditor}`);
+        // For draft loads, skinIdForContext is the ID *from the draft*. We must ensure currentLoadedSkinIdForEditor matches this.
+        currentLoadedSkinIdForEditor = skinIdForContext; 
     }
 
-    const processImageData = async (imageDataUrlInput, fromFile = true) => {
+    const processImageData = async (imageDataUrlInput) => {
         const img = new Image();
         img.onload = async () => {
             if (!offscreenCanvas || !offscreenCtx || !playerTexture || offscreenCanvas.width === 0) { 
@@ -560,18 +560,19 @@ async function loadTextureFromFile(fileOrDataUrl, modelTypeToSet = null, skinIdF
             updateMaterialsTextureProperties(img.width, img.height, false); 
             
             if (!isDraftLoad) { 
-                currentLoadedSkinIdForEditor = idToApplyOnSuccess; // Set the ID context now after successful image load
-                console.log(`Editor: loadTextureFromFile (image loaded, NOT draft) - currentLoadedSkinIdForEditor set to: ${currentLoadedSkinIdForEditor}`);
+                currentLoadedSkinIdForEditor = idToApplyOnSuccess; 
+                console.log(`Editor: loadTextureFromFile > processImageData (image loaded, NOT DRAFT) - currentLoadedSkinIdForEditor finally set to: ${currentLoadedSkinIdForEditor}`);
                 paintHistory = []; 
                 historyIndex = -1;
             }
-            // For draft loads, history and index are restored by loadEditorDraftState separately.
             updateUndoRedoButtons();
 
             if (infoElement) infoElement.innerHTML = "Texture loaded. Building model...";
 
             let typeToUse = modelTypeToSet;
-            if (fromFile && !modelTypeToSet && !isDraftLoad) { 
+            // For non-draft and direct file (not data URL initially), detect type from image.
+            // If it's a data URL (e.g. from pendingFullEditorSkinData or draft), modelTypeToSet should be accurate.
+            if (fileOrDataUrl instanceof File && !modelTypeToSet && !isDraftLoad) { 
                 typeToUse = await detectSkinTypeFromImageDataLocal(imageDataUrlInput);
             } else if (modelTypeToSet) { 
                 typeToUse = modelTypeToSet;
@@ -589,27 +590,29 @@ async function loadTextureFromFile(fileOrDataUrl, modelTypeToSet = null, skinIdF
             buildAndDisplayModel(); 
             if (playerModelGroup) playerModelGroup.visible = true;
             if (modePaintRadio) setUIMode(modePaintRadio.checked ? 'paint' : 'view'); 
-            updateEditorButtonsState(); // Update buttons now that context is fully set
+            updateEditorButtonsState(); 
         };
         img.onerror = (error) => {
-            console.error('Image load error:', error);
+            console.error('Image load error:', error, 'Input was:', imageDataUrlInput ? imageDataUrlInput.substring(0,100) + "..." : "null/undefined");
             if (infoElement) infoElement.innerHTML = `Error processing image: ${error.message || 'Unknown error'}`;
             if (!isDraftLoad) { 
-                currentLoadedSkinIdForEditor = null; // Explicitly nullify on error for non-draft
-                console.log(`Editor: loadTextureFromFile (image error, NOT draft) - currentLoadedSkinIdForEditor set to null.`);
-                resetEditorToDefaultState(false); // false because currentLoadedSkinIdForEditor is already handled
+                currentLoadedSkinIdForEditor = null; 
+                console.log(`Editor: loadTextureFromFile > processImageData (image error, NOT DRAFT) - currentLoadedSkinIdForEditor set to null.`);
+                // Call resetEditorToDefaultState with true to clear localStorage specific to editor drafts if the error was during a non-draft load (like initial import)
+                resetEditorToDefaultState(true); 
             } else {
+                // If a draft load fails, just clear the draft key and reset, don't clear other potential contexts.
                 localStorage.removeItem(currentEditorDraftStateKey);
-                resetEditorToDefaultState(true); // true to clear everything if draft load fails
+                resetEditorToDefaultState(true);
             }
             updateEditorButtonsState();
         };
         img.src = imageDataUrlInput;
     };
 
-    if (!fileOrDataUrl && !isDraftLoad) { // Handling template load (which is NOT a draft load)
-        currentLoadedSkinIdForEditor = null; // Template means no ID
-        console.log(`Editor: loadTextureFromFile (template, NOT draft) - currentLoadedSkinIdForEditor set to null.`);
+    if (!fileOrDataUrl && !isDraftLoad) { 
+        currentLoadedSkinIdForEditor = null; 
+        console.log(`Editor: loadTextureFromFile (template, NOT DRAFT) - currentLoadedSkinIdForEditor set to null.`);
         
         if (!offscreenCanvas || !offscreenCtx || !playerTexture || offscreenCanvas.width === 0) {
             initializeCoreTextureData(); 
@@ -629,7 +632,7 @@ async function loadTextureFromFile(fileOrDataUrl, modelTypeToSet = null, skinIdF
 
         if (infoElement) infoElement.innerHTML = `Displaying paintable template. Import or paint.<br>LMB Drag: Rotate, RMB Drag: Pan, Scroll: Zoom.`;
         
-        let typeForTemplate = modelTypeToSet || 'steve'; // Use provided type or default
+        let typeForTemplate = modelTypeToSet || 'steve'; 
         currentModelType = typeForTemplate;
         if(modelTypeSwitch) modelTypeSwitch.checked = (currentModelType === 'alex');
         if (alexJsonData && steveJsonData) {
@@ -645,17 +648,46 @@ async function loadTextureFromFile(fileOrDataUrl, modelTypeToSet = null, skinIdF
 
 
     if (infoElement) infoElement.innerHTML = "Loading skin texture...";
-    if (typeof fileOrDataUrl === 'string') { 
-        await processImageData(fileOrDataUrl, false);
-    } else if (fileOrDataUrl instanceof File) { 
-        // For file imports that are not drafts, idToApplyOnSuccess will be null initially
-        // currentLoadedSkinIdForEditor will be set to null by loadTextureFromFile on success.
-        await processImageData(fileOrDataUrl, true);
+    if (typeof fileOrDataUrl === 'string') { // Is a Data URL
+        await processImageData(fileOrDataUrl);
+    } else if (fileOrDataUrl instanceof File) { // Is a File object
+        // Read the file to Data URL first, then pass to processImageData.
+        // This is crucial to avoid issues with async FileReader and module re-initialization.
+        const reader = new FileReader();
+        reader.onload = async (event_reader) => {
+            if (event_reader.target.result) {
+                await processImageData(event_reader.target.result);
+            } else {
+                console.error("FileReader error: event.target.result is null for file:", fileOrDataUrl.name);
+                if (infoElement) infoElement.innerHTML = `Error reading file: ${fileOrDataUrl.name}`;
+                if (!isDraftLoad) {
+                    currentLoadedSkinIdForEditor = null;
+                    resetEditorToDefaultState(true);
+                } else {
+                     localStorage.removeItem(currentEditorDraftStateKey);
+                     resetEditorToDefaultState(true);
+                }
+                updateEditorButtonsState();
+            }
+        };
+        reader.onerror = (error) => {
+            console.error("FileReader error:", error, "for file:", fileOrDataUrl.name);
+            if (infoElement) infoElement.innerHTML = `Error reading file: ${error.message}`;
+             if (!isDraftLoad) {
+                currentLoadedSkinIdForEditor = null;
+                resetEditorToDefaultState(true);
+            } else {
+                 localStorage.removeItem(currentEditorDraftStateKey);
+                 resetEditorToDefaultState(true);
+            }
+            updateEditorButtonsState();
+        };
+        reader.readAsDataURL(fileOrDataUrl);
     } else {
         console.warn("loadTextureFromFile: Invalid argument type.", fileOrDataUrl);
         if (!isDraftLoad) {
             currentLoadedSkinIdForEditor = null;
-            resetEditorToDefaultState(false);
+            resetEditorToDefaultState(true);
         } else {
             resetEditorToDefaultState(true);
         }
@@ -808,17 +840,14 @@ async function loadEditorDraftState() {
         try {
             const draft = JSON.parse(draftJSON); 
             
-            // Restore currentLoadedSkinIdForEditor BEFORE calling loadTextureFromFile with isDraftLoad=true
-            currentLoadedSkinIdForEditor = draft.loadedSkinId || null;
-            console.log("Editor: loadEditorDraftState - Restored currentLoadedSkinIdForEditor from draft:", currentLoadedSkinIdForEditor);
-
+            // currentLoadedSkinIdForEditor will be set by loadTextureFromFile via skinIdForContext
             await loadTextureFromFile(draft.imageDataUrl, draft.modelType, draft.loadedSkinId, true); 
             
             paintHistory = draft.paintHistory || []; 
             historyIndex = draft.historyIndex !== undefined ? draft.historyIndex : -1; 
             updateUndoRedoButtons(); 
             
-            console.log("Editor: loadEditorDraftState - Draft loaded successfully.");
+            console.log("Editor: loadEditorDraftState - Draft loaded successfully. currentLoadedSkinIdForEditor is now:", currentLoadedSkinIdForEditor);
             return true; 
         } catch (e) {
             console.error("Error loading editor draft state:", e); 
@@ -1205,7 +1234,47 @@ function setupPaintingListeners() {
 }
 
 function setupUIListeners() {
-    if (importSkinButton && skinInput) { importSkinButton.addEventListener('click', () => skinInput.click()); skinInput.addEventListener('change', (event) => { const file = event.target.files[0]; if (file && file.type === 'image/png') { resetEditorToDefaultState(false); loadTextureFromFile(file, null, null, false); } else if (file) { if(infoElement) infoElement.innerHTML = "Please select a valid PNG file." + (!playerModelGroup ? "<br>LMB Drag: Rotate, RMB Drag: Pan, Scroll: Zoom." : ""); } skinInput.value = null;  }); } 
+    if (importSkinButton && skinInput) {
+        importSkinButton.addEventListener('click', (e) => {
+            e.preventDefault(); 
+            e.stopPropagation(); 
+            skinInput.click();
+        });
+        skinInput.addEventListener('change', async (event) => { 
+            event.preventDefault(); 
+            event.stopPropagation();
+    
+            const file = event.target.files[0];
+            if (file && file.type === 'image/png') {
+                console.log("Editor: File selected via internal import button. Resetting editor state completely.");
+                resetEditorToDefaultState(true); // true to ensure full reset, including clearing currentLoadedSkinIdForEditor
+                
+                console.log("Editor: Attempting to load texture from selected file:", file.name);
+                // Read file to Data URL here to make loadTextureFromFile more robust against context changes
+                const reader = new FileReader();
+                reader.onload = async (e_reader) => {
+                    if (e_reader.target.result) {
+                        // Pass Data URL, explicitly no skinIdForContext, not a draft load
+                        await loadTextureFromFile(e_reader.target.result, null, null, false); 
+                    } else {
+                         console.error("Editor: FileReader error - result is null for internal import.");
+                         if(infoElement) infoElement.innerHTML = "Error reading imported file.";
+                         resetEditorToDefaultState(true); // Reset on error
+                    }
+                };
+                reader.onerror = (e_reader_error) => {
+                     console.error("Editor: FileReader error on internal import:", e_reader_error);
+                     if(infoElement) infoElement.innerHTML = "Error reading imported file.";
+                     resetEditorToDefaultState(true); // Reset on error
+                };
+                reader.readAsDataURL(file);
+
+            } else if (file) {
+                if(infoElement) infoElement.innerHTML = "Please select a valid PNG file." + (!playerModelGroup ? "<br>LMB Drag: Rotate, RMB Drag: Pan, Scroll: Zoom." : "");
+            }
+            skinInput.value = null; 
+        });
+    } 
     if (exportSkinButton) { exportSkinButton.addEventListener('click', () => { if (offscreenCanvas && !isCanvasBlank(offscreenCtx)) { const dataURL = offscreenCanvas.toDataURL('image/png'); const a = document.createElement('a'); a.href = dataURL; a.download = 'player_skin.png'; document.body.appendChild(a); a.click(); document.body.removeChild(a); } else { alert("No skin data to export."); } }); }
     if (editorSaveOrApplyButton) { 
         editorSaveOrApplyButton.addEventListener('click', handleEditorSaveOrApply);
@@ -1454,20 +1523,18 @@ async function initEditor() {
         
         try {
             const pendingSkinData = JSON.parse(pendingSkinDataJSON);
-            // currentLoadedSkinIdForEditor will be set by loadTextureFromFile since !isDraftLoad
             await loadTextureFromFile(pendingSkinData.imageDataUrl, pendingSkinData.type, pendingSkinData.id, false);
             loadedFromSpecificSource = true;
         } catch (e) {
             console.error("Editor: initEditor - Error parsing pendingFullEditorSkinData:", e);
-            currentLoadedSkinIdForEditor = null; // Ensure context is cleared on error
+            currentLoadedSkinIdForEditor = null; 
         }
-        // Always remove skinToEditInFullEditorId if pendingSkinDataJSON was processed, successful or not
         if (skinIdToLoadFromSkinsTabViaPendingString) {
             localStorage.removeItem('skinToEditInFullEditorId');
         }
 
     } else if (skinIdToLoadFromSkinsTabViaPendingString) {
-        console.log("Editor: initEditor - PRIORITY 2: skinToEditInFullEditorId found.");
+        console.log("Editor: initEditor - PRIORITY 2: skinToEditInFullEditorId found (no pending data).");
         localStorage.removeItem(currentEditorDraftStateKey); 
         const skinIdToLoad = parseInt(skinIdToLoadFromSkinsTabViaPendingString);
         localStorage.removeItem('skinToEditInFullEditorId'); 
@@ -1479,39 +1546,35 @@ async function initEditor() {
             const store = transaction.objectStore(SKINS_STORE_NAME);
             const request = store.get(skinIdToLoad);
             
-            // Wrap DB operation in a promise to await its completion
             await new Promise(async (resolveDbOp) => {
                 request.onsuccess = async () => {
                     if (request.result) {
-                        // Pass skinIdToLoad as skinIdForContext
-                        // currentLoadedSkinIdForEditor will be set by loadTextureFromFile
                         await loadTextureFromFile(request.result.imageDataUrl, request.result.type, skinIdToLoad, false);
                         loadedFromSpecificSource = true;
                     } else {
                         console.warn(`Editor: initEditor - Skin with ID ${skinIdToLoad} not found in DB. Resetting editor.`);
-                        resetEditorToDefaultState(true); // This will set currentLoadedSkinIdForEditor to null
+                        resetEditorToDefaultState(true); 
                     }
                     resolveDbOp();
                 };
                 request.onerror = (e) => { 
                     console.error("Editor: initEditor - Error fetching skin for editor:", e); 
-                    resetEditorToDefaultState(true); // This will set currentLoadedSkinIdForEditor to null
+                    resetEditorToDefaultState(true); 
                     resolveDbOp();
                 };
             });
         } else {
             console.warn("Editor: initEditor - DB not ready or invalid skinIdToLoad. Resetting.");
-            resetEditorToDefaultState(true); // This will set currentLoadedSkinIdForEditor to null
+            resetEditorToDefaultState(true); 
         }
     } else {
         console.log("Editor: initEditor - PRIORITY 3: Attempting to load editor's own draft.");
         loadedFromSpecificSource = await loadEditorDraftState(); 
-        // loadEditorDraftState internally sets currentLoadedSkinIdForEditor based on the draft's content.
     }
 
     if (!loadedFromSpecificSource) {
         console.log("Editor: initEditor - PRIORITY 4: No specific source or draft, resetting to default template.");
-        resetEditorToDefaultState(true); // This ensures currentLoadedSkinIdForEditor is null
+        resetEditorToDefaultState(true); 
     }
     
     refreshEditorLayout(); 
@@ -1521,7 +1584,7 @@ async function initEditor() {
         playerModelGroup.visible = hasActualContent || currentLoadedSkinIdForEditor || (playerTexture && playerTexture.image && (playerTexture.image.width !==0));
     }
     
-    console.log(`Editor: initEditor - Final currentLoadedSkinIdForEditor: ${currentLoadedSkinIdForEditor}`);
+    console.log(`Editor: initEditor - Final currentLoadedSkinIdForEditor after all loading logic: ${currentLoadedSkinIdForEditor}`);
     updateEditorButtonsState(); 
 }
 
